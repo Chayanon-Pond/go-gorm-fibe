@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -37,9 +39,61 @@ func main() {
 	}
 	fmt.Println("connect Successful !")
 	db.AutoMigrate(&Book{})
-	currentBook := getBook(db, 1)
-	currentBook.Name = "New Pond"
-	currentBook.Price = 999
-	updateBook(db, currentBook)
+	app := fiber.New()
+	app.Get("/books", func(c *fiber.Ctx) error {
+		return c.JSON(getBooks(db))
+
+	})
+	app.Get("/books/:id", func(c *fiber.Ctx) error {
+		id, err := strconv.Atoi(c.Params("id"))
+		if err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+		book := getBook(db, id)
+		return c.JSON(book)
+
+	})
+	app.Post("/books", func(c *fiber.Ctx) error {
+		book := new(Book)
+		if err := c.BodyParser(book); err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+		err = createBook(db, book)
+		if err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+		return c.JSON(fiber.Map{"message": "create Success ful!"})
+	})
+	app.Put("/books/:id", func(c *fiber.Ctx) error {
+		id, err := strconv.Atoi(c.Params("id"))
+		if err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+		book := getBook(db, id)
+		book.ID = uint(id)
+		err = updateBook(db, book)
+		if err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+		return c.JSON(fiber.Map{
+			"message": "update Book Successful",
+		})
+
+	})
+	app.Delete("/books/:id", func(c *fiber.Ctx) error {
+		id, err := strconv.Atoi(c.Params("id"))
+		if err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+		err = deleteBook(db, id)
+		if err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+		return c.JSON(fiber.Map{
+			"message": "Delete Book Successful",
+		})
+
+	})
+	app.Listen(":8080")
 
 }
