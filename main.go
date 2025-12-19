@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v4"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -20,6 +21,25 @@ const (
 	username     = "myuser"
 	password     = "mypassword"
 )
+
+func authRequired(c *fiber.Ctx) error {
+	cookie := c.Cookies("jwt")
+	if cookie == "" {
+		return c.SendStatus(fiber.StatusUnauthorized)
+	}
+	jwtSecretKey := "TestSecret"
+	token, err := jwt.ParseWithClaims(cookie, jwt.MapClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(jwtSecretKey), nil
+	})
+
+	if err != nil || !token.Valid {
+		return c.SendStatus(fiber.StatusUnauthorized)
+	}
+	claim := token.Claims
+	fmt.Println(claim)
+
+	return c.Next()
+}
 
 func main() {
 	dsn := fmt.Sprintf("host=%s port=%d user=%s "+
@@ -38,8 +58,9 @@ func main() {
 		log.Panic("failed to connect database !")
 	}
 	fmt.Println("connect Successful !")
-	db.AutoMigrate(&Book{})
+	db.AutoMigrate(&Book{}, &User{})
 	app := fiber.New()
+	app.Use("/books", authRequired)
 	app.Get("/books", func(c *fiber.Ctx) error {
 		return c.JSON(getBooks(db))
 
@@ -93,6 +114,37 @@ func main() {
 			"message": "Delete Book Successful",
 		})
 
+	})
+	app.Post("/register", func(c *fiber.Ctx) error {
+		user := new(User)
+		if err := c.BodyParser(user); err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+		err = createUser(db, user)
+		if err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+		return c.JSON(fiber.Map{
+			"message": "Register  Successful",
+		})
+
+	})
+	app.Post("/login", func(c *fiber.Ctx) error {
+		user := new(User)
+		if err := c.BodyParser(user); err != nil {
+			return c.SendStatus(fiber.StatusBadRequest)
+		}
+		token, err := loginUser(db, user)
+		if err != nil {
+			return c.SendStatus(fiber.StatusUnauthorized)
+		}
+		c.Cookie(&fiber.Cookie{
+			Name:     "jwt",
+			Value:    token,
+			Expires:  time.Now().Add(time.Hour * 72),
+			HTTPOnly: true,
+		})
+		return c.JSON(fiber.Map{"message": "Login Successful !"})
 	})
 	app.Listen(":8080")
 
