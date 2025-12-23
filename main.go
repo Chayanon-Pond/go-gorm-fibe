@@ -58,7 +58,50 @@ func main() {
 		log.Panic("failed to connect database !")
 	}
 	fmt.Println("connect Successful !")
-	db.AutoMigrate(&Book{}, &User{})
+	db.AutoMigrate(&Book{}, &User{}, &Publisher{}, &Author{}, AuthorBook{})
+	publisher := Publisher{
+		Details: "Publisher Details",
+		Name:    "Publisher Name",
+	}
+	_ = createPublisher(db, &publisher)
+
+	// Example data for a new author
+	author := Author{
+		Name: "Author Name",
+	}
+	_ = createAuthor(db, &author)
+
+	// // Example data for a new book with an author
+	book := Book{
+		Name:        "Book Title",
+		Author:      "Book Author",
+		Description: "Book Description",
+		PublisherID: publisher.ID,     // Use the ID of the publisher created above
+		Authors:     []Author{author}, // Add the created author
+	}
+	_ = createBookWithAuthor(db, &book, []uint{author.ID})
+	// Example: Get a book with its publisher
+	bookWithPublisher, err := getBookWithPublisher(db, 1) // assuming a book with ID 1
+	if err != nil {
+		// Handle error
+	}
+
+	// Example: Get a book with its authors
+	bookWithAuthors, err := getBookWithAuthors(db, 1) // assuming a book with ID 1
+	if err != nil {
+		// Handle error
+	}
+
+	// Example: List books of a specific author
+	authorBooks, err := listBooksOfAuthor(db, 1) // assuming an author with ID 1
+	if err != nil {
+		// Handle error
+	}
+
+	fmt.Println(bookWithPublisher)
+	fmt.Println(bookWithAuthors)
+	fmt.Println(authorBooks)
+
 	app := fiber.New()
 	app.Use("/books", authRequired)
 	app.Get("/books", func(c *fiber.Ctx) error {
@@ -90,7 +133,7 @@ func main() {
 		if err != nil {
 			return c.SendStatus(fiber.StatusBadRequest)
 		}
-		book := getBook(db, id)
+		book := new(Book)
 		book.ID = uint(id)
 		err = updateBook(db, book)
 		if err != nil {
